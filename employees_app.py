@@ -434,6 +434,28 @@ elif menu=="Exportar CSV":
 # --- Respaldos ---
 elif menu=="Respaldos (Backup/Restore)":
     st.subheader("📦 Crear respaldo (.zip)")
+    import requests, base64, datetime
+
+st.markdown("### ☁️ Subir respaldo directo a GitHub")
+
+if st.button("💾 Subir employees.db a GitHub (backup en la nube)"):
+    token = st.secrets["GITHUB_TOKEN"]
+    repo = st.secrets["GITHUB_REPO"]
+    fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    url = f"https://api.github.com/repos/{repo}/contents/backups/employees_{fecha}.db"
+    with open("employees.db", "rb") as f:
+        content = base64.b64encode(f.read()).decode()
+    payload = {
+        "message": f"Backup automático desde Streamlit {fecha}",
+        "content": content
+    }
+    headers = {"Authorization": f"token {token}"}
+    r = requests.put(url, json=payload, headers=headers)
+    if r.status_code in (200, 201):
+        st.success("✅ Respaldo subido exitosamente a GitHub (carpeta backups/)")
+    else:
+        st.error(f"❌ Error al subir: {r.status_code}\n{r.text}")
+
     if os.path.exists(DB):
         mem=io.BytesIO()
         with zipfile.ZipFile(mem,"w",zipfile.ZIP_DEFLATED) as zf: zf.write(DB, arcname="employees.db")
