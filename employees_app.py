@@ -431,49 +431,71 @@ elif menu=="Exportar CSV":
         except Exception as e:
             st.write(f"{n}: (no disponible) {e}")
 
-# --- Respaldos ---
-elif menu=="Respaldos (Backup/Restore)":
+# -------- Respaldos (Backup/Restore) --------
+elif menu == "Respaldos (Backup/Restore)":
+    st.header("💾 EMPLOYEES APP — Cloud (Full, PPE fixed)")
+    st.caption("Todo en uno: compañías, cuadrillas, trabajadores, PPE, reportes y respaldos.")
+
+    # --- Crear respaldo .zip local ---
     st.subheader("📦 Crear respaldo (.zip)")
-    import requests, base64, datetime
+    import zipfile, io
+    from datetime import datetime
 
-st.markdown("### ☁️ Subir respaldo directo a GitHub")
-
-if st.button("💾 Subir employees.db a GitHub (backup en la nube)"):
-    token = st.secrets["GITHUB_TOKEN"]
-    repo = st.secrets["GITHUB_REPO"]
-    fecha = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    url = f"https://api.github.com/repos/{repo}/contents/backups/employees_{fecha}.db"
-    with open("employees.db", "rb") as f:
-        content = base64.b64encode(f.read()).decode()
-    payload = {
-        "message": f"Backup automático desde Streamlit {fecha}",
-        "content": content
-    }
-    headers = {"Authorization": f"token {token}"}
-    r = requests.put(url, json=payload, headers=headers)
-    if r.status_code in (200, 201):
-        st.success("✅ Respaldo subido exitosamente a GitHub (carpeta backups/)")
-    else:
-        st.error(f"❌ Error al subir: {r.status_code}\n{r.text}")
-
-    if os.path.exists(DB):
-        mem=io.BytesIO()
-        with zipfile.ZipFile(mem,"w",zipfile.ZIP_DEFLATED) as zf: zf.write(DB, arcname="employees.db")
-        mem.seek(0)
-        st.download_button(":arrow_down: Descargar respaldo", data=mem.getvalue(), file_name=f"backup_employees_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip", mime="application/zip")
-    st.markdown("---")
-    st.subheader("⬆️ Restaurar desde ZIP")
-    up=st.file_uploader("Sube un ZIP que contenga employees.db", type=["zip"])
-    if up is not None:
-        import zipfile as _z
+    if st.button("⬇️ Descargar respaldo (.zip)"):
         try:
-            mem=io.BytesIO(up.read())
-            with _z.ZipFile(mem,"r") as zf:
-                if "employees.db" not in zf.namelist():
-                    st.error("El ZIP no contiene employees.db")
-                else:
-                    data=zf.read("employees.db")
-                    with open(DB,"wb") as f: f.write(data)
-                    st.success("Base restaurada. Recarga la app.")
+            fecha = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write("employees.db")
+            st.download_button(
+                "⬇️ Descargar respaldo",
+                data=buffer.getvalue(),
+                file_name=f"backup_employees_{fecha}.zip",
+                mime="application/zip"
+            )
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error al crear respaldo: {e}")
+
+    st.markdown("---")
+
+    # --- Subir respaldo directo a GitHub ---
+    st.subheader("☁️ Subir respaldo directo a GitHub")
+    st.caption("Sube automáticamente employees.db al repositorio (backups/) en GitHub")
+
+    if st.button("⬆️ Subir employees.db a GitHub (backup en la nube)"):
+        try:
+            import os, requests, base64
+            from datetime import datetime
+
+            fecha = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            archivo_zip = f"backup_employees_{fecha}.zip"
+
+            # Crear ZIP temporal en disco
+            with zipfile.ZipFile(archivo_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write("employees.db")
+
+            # Leer secrets de Streamlit Cloud
+            token = st.secrets.get("GITHUB_TOKEN")
+            repo  = st.secrets.get("GITHUB_REPO", "JOCCMUNOZ/EMPLOYEES-APP-FULL-FIXED")
+
+            if not token:
+                st.error("❌ Faltan credenciales: configura tu GITHUB_TOKEN en Streamlit Secrets.")
+            else:
+                # Subir el ZIP a la carpeta backups/ del repo
+                url = f"https://api.github.com/repos/{repo}/contents/backups/{archivo_zip}"
+                with open(archivo_zip, "rb") as f:
+                    content = base64.b64encode(f.read()).decode("utf-8")
+                payload = {
+                    "message": f"Backup {fecha}",
+                    "content": content
+                }
+                headers = {"Authorization": f"token {token}"}
+                r = requests.put(url, json=payload, headers=headers)
+
+                if r.status_code in (200, 201):
+                    st.success("✅ Respaldo subido exitosamente a GitHub (carpeta backups/).")
+                else:
+                    st.error(f"❌ Error al subir: {r.status_code} — {r.text}")
+
+        except Exception as e:
+            st.error(f"Error durante el respaldo: {e}")
